@@ -195,7 +195,7 @@ def render_chat() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Chat Groq Simples", page_icon=":speech_balloon:", layout="centered")
+    st.set_page_config(page_title="Mazzucas's LLM", page_icon=":speech_balloon:", layout="centered")
     init_state()
 
     st.title("Chat Groq Simples")
