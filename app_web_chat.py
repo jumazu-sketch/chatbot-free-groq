@@ -198,7 +198,7 @@ def main() -> None:
     st.set_page_config(page_title="Mazzucas's LLM", page_icon=":speech_balloon:", layout="centered")
     init_state()
 
-    st.title("Chat Groq Simples")
+    st.title("Mazzuca´s bot")
     st.caption("Aplicacao web minima de chat usando sua chave da Groq.")
 
     typed_key, selected_model = sidebar_settings()
