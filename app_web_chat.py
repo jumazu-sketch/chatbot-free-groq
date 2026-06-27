@@ -8,20 +8,16 @@ import streamlit as st
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_KEYS_URL = "https://console.groq.com/keys"
 DEFAULT_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+DEFAULT_API_KEY = "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" # Sua chave padrão integrada
 AVAILABLE_MODELS = [
     "allam-2-7b",
-    "canopylabs/orpheus-arabic-saudi",
-    "canopylabs/orpheus-v1-english",
     "groq/compound",
     "groq/compound-mini",
     "llama-3.1-8b-instant",
     "llama-3.3-70b-versatile",
     "meta-llama/llama-4-scout-17b-16e-instruct",
-    "meta-llama/llama-prompt-guard-2-22m",
-    "meta-llama/llama-prompt-guard-2-86m",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "openai/gpt-oss-safeguard-20b",
     "qwen/qwen3-32b",
     "whisper-large-v3",
     "whisper-large-v3-turbo",
@@ -140,10 +136,10 @@ def get_effective_key() -> str:
         return typed
 
     saved = st.session_state.settings.get("api_key", "")
-    if isinstance(saved, str):
+    if isinstance(saved, str) and saved.strip():
         return saved.strip()
 
-    return ""
+    return DEFAULT_API_KEY # Retorna a chave padrão caso não exista outra salva
 
 
 def sidebar_settings() -> tuple[str, str]:
@@ -151,8 +147,8 @@ def sidebar_settings() -> tuple[str, str]:
     st.sidebar.markdown(f"Criar chave: {GROQ_KEYS_URL}")
 
     saved_key = st.session_state.settings.get("api_key", "")
-    if not isinstance(saved_key, str):
-        saved_key = ""
+    if not isinstance(saved_key, str) or not saved_key:
+        saved_key = DEFAULT_API_KEY # Carrega a chave padrão por padrão na barra lateral
 
     typed_key = st.sidebar.text_input(
         "API Key da Groq",
