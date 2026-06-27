@@ -104,7 +104,6 @@ def extract_text_from_file(uploaded_file) -> str:
         try:
             import pandas as pd
             df = pd.read_csv(uploaded_file)
-            # Retorna a tabela formatada como texto
             return df.to_string(index=False)
         except ImportError:
             return "Erro: Para ler arquivos CSV, a biblioteca 'pandas' precisa estar instalada no requirements.txt."
@@ -118,7 +117,6 @@ def extract_text_from_file(uploaded_file) -> str:
         try:
             import pandas as pd
             df = pd.read_excel(uploaded_file)
-            # Retorna a tabela formatada como texto
             return df.to_string(index=False)
         except ImportError:
             return "Erro: Para ler arquivos Excel, as bibliotecas 'pandas' e 'openpyxl' precisam estar instaladas no requirements.txt."
@@ -256,10 +254,16 @@ def sidebar_settings() -> tuple[str, str]:
         placeholder="gsk_...",
     )
 
+    def format_model_name(model_id: str) -> str:
+        if "vision" in model_id.lower() or "scout" in model_id.lower():
+            return f"📷 [MULTIMODAL] {model_id}"
+        return f"📄 [TEXTO] {model_id}"
+
     model = st.sidebar.selectbox(
         "Modelo",
         options=AVAILABLE_MODELS,
         index=AVAILABLE_MODELS.index(DEFAULT_MODEL),
+        format_func=format_model_name,
     )
 
     if st.sidebar.button("Salvar chave"):
@@ -288,10 +292,15 @@ def render_chat() -> None:
         with st.chat_message(role):
             if role == "user":
                 if isinstance(content, list):
+                    if display:
+                        st.markdown(display)
+                    else:
+                        for item in content:
+                            if item.get("type") == "text":
+                                st.markdown(item.get("text"))
+                    # Renderiza as imagens logo abaixo do texto
                     for item in content:
-                        if item.get("type") == "text":
-                            st.markdown(item.get("text"))
-                        elif item.get("type") == "image_url":
+                        if item.get("type") == "image_url":
                             st.image(item.get("image_url", {}).get("url", ""), width=300)
                 else:
                     st.markdown(display or content)
@@ -311,57 +320,77 @@ def main() -> None:
     env_key = os.getenv("GROQ_API_KEY", "").strip()
     effective_key = typed_key or get_effective_key() or env_key
 
-    # Upload de Arquivos e Imagens (Suporte completo a documentos de escritório e tabelas)
-    uploaded_file = st.file_uploader(
-        "Upload de arquivo ou imagem (Clique e aperte Ctrl+V para colar imagens)",
-        type=["txt", "pdf", "csv", "xlsx", "xls", "docx", "doc", "pptx", "ppt", "png", "jpg", "jpeg"]
-    )
-
-    file_context = ""
-    image_base64 = ""
-    
-    if uploaded_file is not None:
-        file_name = uploaded_file.name.lower()
-        if file_name.endswith((".png", ".jpg", ".jpeg")):
-            bytes_data = uploaded_file.read()
-            base64_str = base64.b64encode(bytes_data).decode("utf-8")
-            ext = "png" if file_name.endswith(".png") else "jpeg"
-            image_base64 = f"data:image/{ext};base64,{base64_str}"
-            st.image(uploaded_file, caption="Visualização da imagem carregada", width=150)
-        else:
-            file_context = extract_text_from_file(uploaded_file)
-            if file_context and not file_context.startswith("Erro:"):
-                st.success(f"Arquivo '{uploaded_file.name}' carregado e processado com sucesso!")
-            elif file_context.startswith("Erro:"):
-                st.error(file_context)
-
     if not validate_api_key_format(effective_key):
         st.info("Informe e salve uma API key valida para comecar o chat.")
 
     render_chat()
 
-    user_prompt = st.chat_input("Digite sua pergunta...")
-    if not user_prompt:
+    # O chat_input agora aceita múltiplos arquivos de forma nativa!
+    # O botão de clipe de papel aparecerá no canto inferior, diretamente integrado ao campo de digitação.
+    prompt = st.chat_input(
+        "Digite sua pergunta ou envie arquivos...",
+        accept_file="multiple",
+        file_type=["txt", "pdf", "csv", "xlsx", "xls", "docx", "doc", "pptx", "ppt", "png", "jpg", "jpeg"]
+    )
+    
+    if not prompt:
         return
 
-    # Processar o tipo de mensagem a ser salva
-    if image_base64:
+    # Extrai o texto digitado e a lista de arquivos enviados
+    user_text = (prompt.text or "").strip()
+    uploaded_files = prompt.files or []
+
+    # Se o usuário enviar um arquivo mas esquecer de digitar um texto, damos uma instrução padrão
+    if not user_text and uploaded_files:
+        user_text = "Analise o arquivo que enviei e resuma suas principais informações."
+
+    file_context_list = []
+    image_base64_list = []
+    processed_file_names = []
+    
+    # Processa cada um dos arquivos anexados no chat_input
+    for uploaded_file in uploaded_files:
+        file_name = uploaded_file.name.lower()
+        if file_name.endswith((".png", ".jpg", ".jpeg")):
+            bytes_data = uploaded_file.read()
+            base64_str = base64.b64encode(bytes_data).decode("utf-8")
+            ext = "png" if file_name.endswith(".png") else "jpeg"
+            image_base64_list.append(f"data:image/{ext};base64,{base64_str}")
+            processed_file_names.append(uploaded_file.name)
+        else:
+            text_extracted = extract_text_from_file(uploaded_file)
+            if text_extracted and not text_extracted.startswith("Erro:"):
+                file_context_list.append(f"--- Conteúdo do arquivo '{uploaded_file.name}' ---\n{text_extracted}\n---")
+                processed_file_names.append(uploaded_file.name)
+            elif text_extracted.startswith("Erro:"):
+                st.error(text_extracted)
+                return
+
+    # Formatação das mensagens e estruturação do histórico
+    file_context = "\n\n".join(file_context_list)
+    
+    if image_base64_list:
         is_vision = "vision" in selected_model or "scout" in selected_model
         if not is_vision:
             st.warning("⚠️ O modelo atual pode não aceitar imagens. Escolha um modelo de visão no menu lateral.")
             
-        message_content = [
-            {"type": "text", "text": user_prompt},
-            {"type": "image_url", "image_url": {"url": image_base64}}
-        ]
-        display_content = user_prompt
-    elif file_context and not file_context.startswith("Erro:"):
-        # Insere o texto extraído do documento no prompt para alimentar o LLM
-        message_content = f"Conteúdo do arquivo '{uploaded_file.name}':\n---\n{file_context}\n---\n\nPergunta do usuário: {user_prompt}"
-        display_content = f"📄 Enviei o arquivo *{uploaded_file.name}*\n\n{user_prompt}"
+        final_prompt = user_text
+        if file_context:
+            final_prompt = f"{file_context}\n\nPergunta do usuário: {user_text}"
+            
+        message_content = [{"type": "text", "text": final_prompt}]
+        for img in image_base64_list:
+            message_content.append({"type": "image_url", "image_url": {"url": img}})
+            
+        files_str = ", ".join(processed_file_names)
+        display_content = f"📎 Arquivos enviados: *{files_str}*\n\n{user_text}"
+    elif file_context:
+        message_content = f"{file_context}\n\nPergunta do usuário: {user_text}"
+        files_str = ", ".join(processed_file_names)
+        display_content = f"📄 Arquivos enviados: *{files_str}*\n\n{user_text}"
     else:
-        message_content = user_prompt
-        display_content = user_prompt
+        message_content = user_text
+        display_content = user_text
 
     st.session_state.messages.append({
         "role": "user",
@@ -371,10 +400,10 @@ def main() -> None:
     
     with st.chat_message("user"):
         if isinstance(message_content, list):
+            if display_content:
+                st.markdown(display_content)
             for item in message_content:
-                if item["type"] == "text":
-                    st.markdown(item["text"])
-                elif item["type"] == "image_url":
+                if item["type"] == "image_url":
                     st.image(item["image_url"]["url"], width=300)
         else:
             st.markdown(display_content)
