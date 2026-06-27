@@ -16,16 +16,10 @@ AVAILABLE_MODELS = [
     "llama-3.2-90b-vision-preview",
     "llama-3.1-8b-instant",
     "llama-3.3-70b-versatile",
-    "allam-2-7b",
-    "canopylabs/orpheus-arabic-saudi",
-    "canopylabs/orpheus-v1-english",
     "groq/compound",
     "groq/compound-mini",
-    "meta-llama/llama-prompt-guard-2-22m",
-    "meta-llama/llama-prompt-guard-2-86m",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
-    "openai/gpt-oss-safeguard-20b",
     "qwen/qwen3-32b",
     "whisper-large-v3",
     "whisper-large-v3-turbo",
@@ -298,7 +292,6 @@ def render_chat() -> None:
                         for item in content:
                             if item.get("type") == "text":
                                 st.markdown(item.get("text"))
-                    # Renderiza as imagens logo abaixo do texto
                     for item in content:
                         if item.get("type") == "image_url":
                             st.image(item.get("image_url", {}).get("url", ""), width=300)
@@ -325,8 +318,6 @@ def main() -> None:
 
     render_chat()
 
-    # O chat_input agora aceita múltiplos arquivos de forma nativa!
-    # O botão de clipe de papel aparecerá no canto inferior, diretamente integrado ao campo de digitação.
     prompt = st.chat_input(
         "Digite sua pergunta ou envie arquivos...",
         accept_file="multiple",
@@ -336,11 +327,9 @@ def main() -> None:
     if not prompt:
         return
 
-    # Extrai o texto digitado e a lista de arquivos enviados
     user_text = (prompt.text or "").strip()
     uploaded_files = prompt.files or []
 
-    # Se o usuário enviar um arquivo mas esquecer de digitar um texto, damos uma instrução padrão
     if not user_text and uploaded_files:
         user_text = "Analise o arquivo que enviei e resuma suas principais informações."
 
@@ -348,7 +337,6 @@ def main() -> None:
     image_base64_list = []
     processed_file_names = []
     
-    # Processa cada um dos arquivos anexados no chat_input
     for uploaded_file in uploaded_files:
         file_name = uploaded_file.name.lower()
         if file_name.endswith((".png", ".jpg", ".jpeg")):
@@ -366,7 +354,6 @@ def main() -> None:
                 st.error(text_extracted)
                 return
 
-    # Formatação das mensagens e estruturação do histórico
     file_context = "\n\n".join(file_context_list)
     
     if image_base64_list:
