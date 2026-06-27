@@ -24,12 +24,46 @@ AVAILABLE_MODELS = [
     "whisper-large-v3",
     "whisper-large-v3-turbo",
 ]
+
+# Banco de dados de Assistentes / Personas disponíveis no chat
+ASSISTANTS = {
+    "Assistente Padrão": {
+        "description": "Um assistente geral, objetivo e didático. Responde de forma curta e clara em português.",
+        "prompt": (
+            "Voce e um assistente objetivo e didatico. "
+            "Responda em portugues de forma clara e curta quando possivel."
+        ),
+        "starters": [
+            {"label": "📝 Melhore uma frase", "text": "Melhore esta frase em Inglês para soar mais natural e profissional: "},
+            {"label": "🗣️ Tradução perfeita", "text": "Qual é a melhor tradução para o português da frase/termo: "},
+            {"label": "📄 Resumir texto", "text": "Resuma o seguinte texto de forma didática e em tópicos: "}
+        ]
+    },
+    "Natural Clear English": {
+        "description": "Designed to bridge the gap between non-native English and professional clarity by correcting verb tenses and idioms while preserving simplicity.",
+        "prompt": (
+            "You are a \"Natural English Editor\" for a non-native professional. "
+            "Your goal is to help the user polish their emails and messages so they are grammatically correct and clear, "
+            "while keeping the tone simple, direct, and authentic to a non-native speaker.\n\n"
+            "Objectives:\n"
+            "1. Fix Essential Errors: Correct \"really needed\" mistakes like verb tenses (e.g., change \"I'd like to aligned\" to \"I'd like to align\") and incorrect prepositions.\n"
+            "2. Use Common Expressions: Replace awkward phrasing with common, everyday workplace idioms (e.g., change \"in this meanwhile\" to \"in the meantime\").\n"
+            "3. Keep it Simple: Do NOT use \"big\" or sophisticated words. Avoid sounding like a corporate lawyer or a professional writer. Use high-frequency vocabulary.\n"
+            "4. Preserve the User's Voice: Keep the message short and to the point. The final result should sound like a competent professional who is a non-native speaker, not a native poet.\n\n"
+            "Output Format:\n"
+            "- First, provide the \"Suggested Version\" (the corrected text).\n"
+            "- Second, provide a \"Why?\" section with a few bullet points explaining the most important corrections in simple terms."
+        ),
+        "starters": [
+            {"label": "✉️ Polish an email", "text": "Please polish this email for me to make it grammatically correct and clear:\n\n"},
+            {"label": "💬 Fix this sentence", "text": "Fix this sentence to sound simple and correct:\n\n"},
+            {"label": "🤝 Business request", "text": "Make this business request clear, direct, and natural:\n\n"}
+        ]
+    }
+}
+
 APP_SETTINGS_DIR = Path(os.getenv("APPDATA", Path.home())) / "TesteSolver"
 APP_SETTINGS_FILE = APP_SETTINGS_DIR / "config.json"
-SYSTEM_PROMPT = (
-    "Voce e um assistente objetivo e didatico. "
-    "Responda em portugues de forma clara e curta quando possivel."
-)
 
 
 def load_settings() -> dict:
@@ -202,8 +236,8 @@ def ask_groq(api_key: str, model: str, messages: list[dict]) -> str:
     return answer
 
 
-def build_messages(history: list[dict]) -> list[dict]:
-    api_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+def build_messages(history: list[dict], system_prompt: str) -> list[dict]:
+    api_messages = [{"role": "system", "content": system_prompt}]
     for msg in history:
         api_messages.append({
             "role": msg["role"],
@@ -232,7 +266,7 @@ def get_effective_key() -> str:
     return DEFAULT_API_KEY
 
 
-def sidebar_settings() -> tuple[str, str]:
+def sidebar_settings() -> tuple[str, str, str]:
     st.sidebar.title("Configuracao")
     st.sidebar.markdown(f"Criar chave: {GROQ_KEYS_URL}")
 
@@ -248,6 +282,7 @@ def sidebar_settings() -> tuple[str, str]:
         placeholder="gsk_...",
     )
 
+    # Seletor de Modelo
     def format_model_name(model_id: str) -> str:
         if "vision" in model_id.lower() or "scout" in model_id.lower():
             return f"📷 [MULTIMODAL] {model_id}"
@@ -259,6 +294,21 @@ def sidebar_settings() -> tuple[str, str]:
         index=AVAILABLE_MODELS.index(DEFAULT_MODEL),
         format_func=format_model_name,
     )
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Persona do Chatbot")
+    
+    # Seletor do Assistente / Persona
+    selected_assistant = st.sidebar.selectbox(
+        "Selecione o Assistente",
+        options=list(ASSISTANTS.keys()),
+        index=0
+    )
+    
+    # Mostra a descrição do assistente selecionado na barra lateral
+    st.sidebar.info(ASSISTANTS[selected_assistant]["description"])
+
+    st.sidebar.markdown("---")
 
     if st.sidebar.button("Salvar chave"):
         if not validate_api_key_format(typed_key.strip()):
@@ -275,7 +325,7 @@ def sidebar_settings() -> tuple[str, str]:
         st.session_state.messages = []
         st.rerun()
 
-    return typed_key.strip(), model
+    return typed_key.strip(), model, selected_assistant
 
 
 def render_chat() -> None:
@@ -308,7 +358,7 @@ def main() -> None:
     st.title("Mazzuca´s bot")
     st.caption("Aplicacao web minima de chat usando sua chave da Groq.")
 
-    typed_key, selected_model = sidebar_settings()
+    typed_key, selected_model, selected_assistant = sidebar_settings()
 
     env_key = os.getenv("GROQ_API_KEY", "").strip()
     effective_key = typed_key or get_effective_key() or env_key
@@ -318,10 +368,31 @@ def main() -> None:
 
     render_chat()
 
+    # Bloco de Sugestões de Conversa Dinâmico (muda dependendo do Assistente ativo)
+    if not st.session_state.messages:
+        st.markdown("### 💡 Sugestões de conversa:")
+        starters = ASSISTANTS[selected_assistant]["starters"]
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button(starters[0]["label"], use_container_width=True):
+                st.session_state.chat_input = starters[0]["text"]
+                st.rerun()
+        with col2:
+            if st.button(starters[1]["label"], use_container_width=True):
+                st.session_state.chat_input = starters[1]["text"]
+                st.rerun()
+        with col3:
+            if st.button(starters[2]["label"], use_container_width=True):
+                st.session_state.chat_input = starters[2]["text"]
+                st.rerun()
+
+    # O chat_input com a chave (key) para permitir o preenchimento automático pelas sugestões
     prompt = st.chat_input(
         "Digite sua pergunta ou envie arquivos...",
         accept_file="multiple",
-        file_type=["txt", "pdf", "csv", "xlsx", "xls", "docx", "doc", "pptx", "ppt", "png", "jpg", "jpeg"]
+        file_type=["txt", "pdf", "csv", "xlsx", "xls", "docx", "doc", "pptx", "ppt", "png", "jpg", "jpeg"],
+        key="chat_input"
     )
     
     if not prompt:
@@ -406,7 +477,9 @@ def main() -> None:
     with st.chat_message("assistant"):
         with st.spinner("Pensando..."):
             try:
-                api_messages = build_messages(st.session_state.messages)
+                # Carrega o prompt do assistente dinamicamente baseado na seleção da sidebar
+                active_system_prompt = ASSISTANTS[selected_assistant]["prompt"]
+                api_messages = build_messages(st.session_state.messages, active_system_prompt)
                 answer = ask_groq(effective_key, selected_model, api_messages)
             except Exception as exc:
                 st.error(str(exc))
