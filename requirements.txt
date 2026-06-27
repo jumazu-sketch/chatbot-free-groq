@@ -1,1 +1,6 @@
 streamlit>=1.35.0
+pypdf
+pandas
+openpyxl
+python-docx
+python-pptx
